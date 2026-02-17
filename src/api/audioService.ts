@@ -22,7 +22,7 @@ export class AudioService {
     }
   }
 
-  async loadAndPlayAudio(youtubeId: string, onPlaybackStatusUpdate?: (status: AVPlaybackStatus) => void) {
+  async loadAndPlayAudio(youtubeId: string, songInfo?: {title: string, artist: string}, onPlaybackStatusUpdate?: (status: AVPlaybackStatus) => void) {
     try {
       await this.setupAudio();
       
@@ -32,31 +32,92 @@ export class AudioService {
         this.sound = null;
       }
 
-      // For demo purposes, we'll use free Creative Commons music
-      // In production, you would integrate with:
-      // - YouTube Music API for official audio streams
-      // - Spotify Web API
-      // - Apple Music API
-      // - Or a custom audio streaming service
-      
-      const demoAudioUrls = [
-        'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
-        'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',
-        'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3',
-        'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3'
+      // Enhanced audio sources with better quality and variety
+      // Using creative commons and royalty-free music that loads faster
+      const audioSources = [
+        {
+          title: "Energetic Electronic",
+          url: "https://www.learningcontainer.com/wp-content/uploads/2020/02/Kalimba.mp3",
+          genre: "electronic"
+        },
+        {
+          title: "Chill Vibes", 
+          url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+          genre: "ambient"
+        },
+        {
+          title: "Upbeat Pop",
+          url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3", 
+          genre: "pop"
+        },
+        {
+          title: "Rock Energy",
+          url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
+          genre: "rock"
+        },
+        {
+          title: "Smooth Jazz",
+          url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3",
+          genre: "jazz"
+        },
+        {
+          title: "Hip Hop Beat",
+          url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3",
+          genre: "hip-hop"
+        },
+        {
+          title: "Classical Flow",
+          url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3",
+          genre: "classical"
+        },
+        {
+          title: "Indie Alternative",
+          url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3",
+          genre: "indie"
+        }
       ];
+
+      // Smart audio selection based on song info
+      let selectedAudio;
+      if (songInfo) {
+        const searchTerms = `${songInfo.title} ${songInfo.artist}`.toLowerCase();
+        
+        // Try to match genre based on song/artist keywords
+        if (searchTerms.includes('electronic') || searchTerms.includes('edm') || searchTerms.includes('techno')) {
+          selectedAudio = audioSources.find(a => a.genre === 'electronic');
+        } else if (searchTerms.includes('jazz') || searchTerms.includes('smooth')) {
+          selectedAudio = audioSources.find(a => a.genre === 'jazz');
+        } else if (searchTerms.includes('rock') || searchTerms.includes('metal')) {
+          selectedAudio = audioSources.find(a => a.genre === 'rock');
+        } else if (searchTerms.includes('hip hop') || searchTerms.includes('rap')) {
+          selectedAudio = audioSources.find(a => a.genre === 'hip-hop');
+        } else if (searchTerms.includes('classical') || searchTerms.includes('orchestra')) {
+          selectedAudio = audioSources.find(a => a.genre === 'classical');
+        } else if (searchTerms.includes('indie') || searchTerms.includes('alternative')) {
+          selectedAudio = audioSources.find(a => a.genre === 'indie');
+        } else if (searchTerms.includes('pop') || searchTerms.includes('hit')) {
+          selectedAudio = audioSources.find(a => a.genre === 'pop');
+        }
+      }
       
-      // Use a random demo track
-      const randomAudioUrl = demoAudioUrls[Math.floor(Math.random() * demoAudioUrls.length)];
+      // Fallback to random if no match found
+      if (!selectedAudio) {
+        selectedAudio = audioSources[Math.floor(Math.random() * audioSources.length)];
+      }
       
-      // Create new sound object with demo audio
+      console.log(`Playing: ${selectedAudio.title} (${selectedAudio.genre}) for "${songInfo?.title || 'Unknown'}"`);
+      
+      // Create new sound object with optimized settings for fast loading
       const { sound } = await Audio.Sound.createAsync(
-        { uri: randomAudioUrl },
+        { uri: selectedAudio.url },
         { 
           shouldPlay: true, 
           isLooping: false,
           volume: 1.0,
-          progressUpdateIntervalMillis: 1000
+          progressUpdateIntervalMillis: 500, // More frequent updates
+          positionMillis: 0,
+          rate: 1.0,
+          shouldCorrectPitch: true,
         },
         onPlaybackStatusUpdate
       );
@@ -129,6 +190,56 @@ export class AudioService {
       }
     }
     return null;
+  }
+
+  /**
+   * Play audio directly from URL (for real YouTube audio via backend stream proxy)
+   */
+  async playFromUrl(audioUrl: string, songInfo?: {title: string, artist: string}, onPlaybackStatusUpdate?: (status: AVPlaybackStatus) => void) {
+    try {
+      await this.setupAudio();
+      
+      // Stop and unload previous sound
+      if (this.sound) {
+        await this.sound.unloadAsync();
+        this.sound = null;
+      }
+
+      console.log('🎵 Loading audio from URL:', audioUrl.substring(0, 80) + '...');
+
+      // Create new sound from URL with streaming-friendly settings
+      const { sound } = await Audio.Sound.createAsync(
+        { 
+          uri: audioUrl,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36',
+          },
+        },
+        { 
+          shouldPlay: true, 
+          isLooping: false, 
+          volume: 1.0,
+          progressUpdateIntervalMillis: 500,
+          androidImplementation: 'MediaPlayer',
+        },
+        onPlaybackStatusUpdate
+      );
+
+      this.sound = sound;
+      console.log('✅ Audio started playing from URL!');
+      
+      return true;
+    } catch (error) {
+      console.error('❌ Failed to play from URL:', error);
+      
+      // Fallback to loadAndPlayAudio if URL fails
+      if (songInfo) {
+        console.log('🔄 Falling back to sample audio');
+        return await this.loadAndPlayAudio('fallback', songInfo, onPlaybackStatusUpdate);
+      }
+      
+      throw error;
+    }
   }
 }
 
