@@ -123,6 +123,10 @@ app.get('/api/audio/:videoId', async (req, res) => {
     if (fs.existsSync(COOKIES_PATH)) {
       ytdlpOpts.extraArgs = ['--cookies', COOKIES_PATH];
       console.log('🔐 Using yt-dlp cookies for extraction');
+    } else if (process.env.YTDLP_USE_BROWSER_COOKIES === 'true') {
+      // Fallback: use browser cookies (Chrome)
+      ytdlpOpts.extraArgs = ['--cookies-from-browser', 'chrome'];
+      console.log('🔐 Using Chrome browser cookies for extraction');
     }
 
     const info = await youtubedl(`https://www.youtube.com/watch?v=${videoId}`, ytdlpOpts);
@@ -216,15 +220,29 @@ app.get('/api/stream/:videoId', async (req, res) => {
       return res.status(400).json({ error: 'Invalid YouTube video ID' });
     }
 
-    // Use yt-dlp to get audio URL
-    const info = await youtubedl(`https://www.youtube.com/watch?v=${videoId}`, {
+    // Use yt-dlp to get audio URL - include cookies if available
+    const ytdlpOpts = {
       dumpSingleJson: true,
       noCheckCertificates: true,
       noWarnings: true,
       preferFreeFormats: false,
       format: 'bestaudio[ext=m4a]/bestaudio',
       skipDownload: true,
-    });
+      // prevent verbose progress output in logs
+      progress: false
+    };
+
+    // If cookies file exists, pass it to yt-dlp via extra args
+    if (fs.existsSync(COOKIES_PATH)) {
+      ytdlpOpts.extraArgs = ['--cookies', COOKIES_PATH];
+      console.log('🔐 Using yt-dlp cookies for streaming');
+    } else if (process.env.YTDLP_USE_BROWSER_COOKIES === 'true') {
+      // Fallback: use browser cookies (Chrome)
+      ytdlpOpts.extraArgs = ['--cookies-from-browser', 'chrome'];
+      console.log('🔐 Using Chrome browser cookies for streaming');
+    }
+
+    const info = await youtubedl(`https://www.youtube.com/watch?v=${videoId}`, ytdlpOpts);
 
     // Extract the audio URL from the info
     let audioUrl = info.url;

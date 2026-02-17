@@ -10,3 +10,9 @@ services:
         value: 3001
       - key: NODE_ENV
         value: production
+      - key: YTDLP_COOKIES
+        sync: false
+      - key: YTDLP_COOKIES_PATH
+        value: /tmp/yt_cookies.txt
+      - key: YTDLP_USE_BROWSER_COOKIES
+        value: false
