@@ -119,13 +119,13 @@ app.get('/api/audio/:videoId', async (req, res) => {
       progress: false
     };
 
-    // If cookies file exists, pass it to yt-dlp via extra args
+    // If cookies file exists, pass it to yt-dlp
     if (fs.existsSync(COOKIES_PATH)) {
-      ytdlpOpts.extraArgs = ['--cookies', COOKIES_PATH];
+      ytdlpOpts.cookies = COOKIES_PATH;
       console.log('🔐 Using yt-dlp cookies for extraction');
     } else if (process.env.YTDLP_USE_BROWSER_COOKIES === 'true') {
       // Fallback: use browser cookies (Chrome)
-      ytdlpOpts.extraArgs = ['--cookies-from-browser', 'chrome'];
+      ytdlpOpts.cookiesFromBrowser = 'chrome';
       console.log('🔐 Using Chrome browser cookies for extraction');
     }
 
@@ -232,13 +232,13 @@ app.get('/api/stream/:videoId', async (req, res) => {
       progress: false
     };
 
-    // If cookies file exists, pass it to yt-dlp via extra args
+    // If cookies file exists, pass it to yt-dlp
     if (fs.existsSync(COOKIES_PATH)) {
-      ytdlpOpts.extraArgs = ['--cookies', COOKIES_PATH];
+      ytdlpOpts.cookies = COOKIES_PATH;
       console.log('🔐 Using yt-dlp cookies for streaming');
     } else if (process.env.YTDLP_USE_BROWSER_COOKIES === 'true') {
       // Fallback: use browser cookies (Chrome)
-      ytdlpOpts.extraArgs = ['--cookies-from-browser', 'chrome'];
+      ytdlpOpts.cookiesFromBrowser = 'chrome';
       console.log('🔐 Using Chrome browser cookies for streaming');
     }
 
