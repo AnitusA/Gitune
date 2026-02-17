@@ -4,7 +4,7 @@ import { Song } from './youtube';
 // Backend URL — update this after deploying to Render
 // For local dev: 'http://192.168.100.46:3001'
 // For production: 'https://your-app-name.onrender.com'
-const BACKEND_SERVER_URL = 'https://project-dream-backend.onrender.com';
+const BACKEND_SERVER_URL = 'https://gitune.onrender.com';
 
 export interface YouTubeAudioInfo {
   success: boolean;
@@ -350,26 +350,12 @@ export class YouTubeAudioService {
   }> {
     console.log(`🎯 Getting audio for: ${song.title} (${song.id})`);
 
-    const audioInfo = await this.getAudioUrl(song.id);
-
-    // If we have audioInfo, prefer direct URL when container is widely supported
-    if (audioInfo && audioInfo.audioUrl) {
-      const supportedContainers = ['mp3', 'm4a', 'mp4', 'aac', 'mpeg'];
-      const container = (audioInfo.container || '').toLowerCase();
-
-      if (supportedContainers.includes(container)) {
-        console.log('🎵 Direct playable container detected:', container);
-        return { type: 'direct', url: audioInfo.audioUrl, info: audioInfo };
-      }
-
-      // Container not directly supported by expo-av; use proxied stream
-      console.log('🔀 Container not directly supported, using proxied stream:', container);
-      return { type: 'stream', url: this.getDirectStreamUrl(song.id), info: audioInfo };
-    }
-
-    // If backend alive but no audioInfo, use stream proxy
+    // Prefer the backend stream proxy — it's the most reliable for mobile playback.
+    // Avoid calling /api/audio for direct URLs which can fail for some videos;
+    // instead use the proxied stream that the server will fetch and serve in a
+    // mobile-friendly container (m4a/mp4) that `expo-av` supports.
     if (await this.checkBackendHealth()) {
-      console.log('🔄 Backend available — using proxied stream');
+      console.log('🔄 Using backend proxied stream for reliable playback');
       return { type: 'stream', url: this.getDirectStreamUrl(song.id) };
     }
 

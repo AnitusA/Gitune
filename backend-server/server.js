@@ -8,11 +8,31 @@ const express = require('express');
 const cors = require('cors');
 const { google } = require('googleapis');
 const youtubedl = require('youtube-dl-exec');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const fetch = require('node-fetch');
 const { PassThrough } = require('stream');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// Optional: support passing YouTube cookies (Netscape format) via env var
+// Useful for age-restricted / sign-in-required videos. Set YTDLP_COOKIES
+// to the cookies file content (securely) in your host (e.g., Render secret),
+// or set YTDLP_COOKIES_PATH to point to a cookies file on disk.
+const COOKIES_ENV = process.env.YTDLP_COOKIES || '';
+const COOKIES_PATH = process.env.YTDLP_COOKIES_PATH || path.join(os.tmpdir(), 'yt_cookies.txt');
+if (COOKIES_ENV) {
+  try {
+    fs.writeFileSync(COOKIES_PATH, COOKIES_ENV, { encoding: 'utf8', mode: 0o600 });
+    console.log('🔐 yt-dlp cookies written to', COOKIES_PATH);
+  } catch (e) {
+    console.warn('⚠️ Failed to write yt-dlp cookies file:', e.message || e);
+  }
+} else if (process.env.YTDLP_COOKIES_PATH) {
+  console.log('🔐 Using existing yt-dlp cookies file at', COOKIES_PATH);
+}
 
 // Enable CORS for React Native app
 app.use(cors());
@@ -87,14 +107,25 @@ app.get('/api/audio/:videoId', async (req, res) => {
     }
 
     // Use yt-dlp to get audio URL - much more reliable than ytdl-core
-    const info = await youtubedl(`https://www.youtube.com/watch?v=${videoId}`, {
+    // Build options; include cookies file if available
+    const ytdlpOpts = {
       dumpSingleJson: true,
       noCheckCertificates: true,
       noWarnings: true,
       preferFreeFormats: false,
       format: 'bestaudio[ext=m4a]/bestaudio',
       skipDownload: true,
-    });
+      // prevent verbose progress output in logs
+      progress: false
+    };
+
+    // If cookies file exists, pass it to yt-dlp via extra args
+    if (fs.existsSync(COOKIES_PATH)) {
+      ytdlpOpts.extraArgs = ['--cookies', COOKIES_PATH];
+      console.log('🔐 Using yt-dlp cookies for extraction');
+    }
+
+    const info = await youtubedl(`https://www.youtube.com/watch?v=${videoId}`, ytdlpOpts);
 
     if (!info || !info.url) {
       // Try to find URL in requested_formats or formats array
