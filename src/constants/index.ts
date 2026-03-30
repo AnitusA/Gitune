@@ -1,4 +1,14 @@
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@env';
+import Constants from 'expo-constants';
+
+type ExpoExtra = {
+    supabaseUrl?: string;
+    supabaseAnonKey?: string;
+    SUPABASE_URL?: string;
+    SUPABASE_ANON_KEY?: string;
+};
+
+const extra = (Constants.expoConfig?.extra ?? {}) as ExpoExtra;
 
 export const COLORS = {
     BACKGROUND: "#0F172A", // Dark Slate
@@ -15,8 +25,8 @@ export const COLORS = {
 };
 
 export const ENV = {
-    SUPABASE_URL: SUPABASE_URL || '',
-    SUPABASE_ANON_KEY: SUPABASE_ANON_KEY || '',
+    SUPABASE_URL: SUPABASE_URL || extra.supabaseUrl || extra.SUPABASE_URL || '',
+    SUPABASE_ANON_KEY: SUPABASE_ANON_KEY || extra.supabaseAnonKey || extra.SUPABASE_ANON_KEY || '',
 };
 
 export const CONSTANTS = {

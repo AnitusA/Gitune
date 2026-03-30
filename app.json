@@ -7,11 +7,6 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-    "extra": {
-      "eas": {
-        "projectId": "7f8a9b1c-2d3e-4f5g-6h7i-8j9k0l1m2n3o"
-      }
-    },
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -20,7 +15,9 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "UIBackgroundModes": ["audio"],
+        "UIBackgroundModes": [
+          "audio"
+        ],
         "NSAppleMusicUsageDescription": "This app uses background audio playback for music streaming",
         "NSMicrophoneUsageDescription": "This app does not use microphone"
       }
@@ -45,6 +42,14 @@
     "plugins": [
       "expo-secure-store",
       "expo-font"
-    ]
+    ],
+    "extra": {
+      "supabaseUrl": "https://zznujyryutfydqfxxtkw.supabase.co",
+      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp6bnVqeXJ5dXRmeWRxZnh4dGt3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ4NjE4NDcsImV4cCI6MjA5MDQzNzg0N30.KjZ0vJg1OgvZcCyo7SMPdqOUCi6dhf9HiyfFUTV7hqg",
+      "eas": {
+        "projectId": "5f8b79fc-a306-4f6c-884d-2b881d4c8778"
+      }
+    },
+    "owner": "anitus"
   }
 }

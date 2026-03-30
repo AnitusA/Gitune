@@ -199,22 +199,32 @@ export const HiddenYouTubePlayer = forwardRef<YouTubePlayerRef, Props>(
             return;
           }
 
-          // Check method availability
           const player = playerRef.current;
-          if (typeof player.playVideo !== 'function') {
-            console.error('❌ playVideo method not available. Available methods:', Object.keys(player));
-            console.error('Player state:', player.getPlayerState?.());
-
-            // Try alternative method
-            if (player.h && typeof player.h.playVideo === 'function') {
-              console.log('🔄 Attempting alternative play method...');
-              player.h.playVideo();
-            }
-            return;
-          }
 
           try {
-            player.playVideo();
+            // Try direct method first
+            if (typeof player.playVideo === 'function') {
+              player.playVideo();
+            }
+            // Try iframe method
+            else if (player.getIframe && typeof player.getIframe === 'function') {
+              const iframe = player.getIframe();
+              if (iframe && iframe.contentWindow) {
+                iframe.contentWindow.postMessage('{"event":"command","func":"playVideo","args":""}', '*');
+              }
+            }
+            // Last resort: trigger via player internal API
+            else {
+              console.error('❌ No playVideo method found. Player:', player);
+              console.log('Trying alternative: dispatching play command...');
+              // Force play via internal player if methods aren't exposed
+              const videoElement = document.querySelector('iframe#youtube-player');
+              if (videoElement) {
+                console.log('Found iframe, attempting postMessage play');
+                // @ts-ignore
+                videoElement.contentWindow?.postMessage('{"event":"command","func":"playVideo","args":""}', '*');
+              }
+            }
           } catch (e) {
             console.error('Error playing (web):', e);
           }
