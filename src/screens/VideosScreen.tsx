@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert, ActivityIndicator, Image, ScrollView, Dimensions, Modal } from 'react-native';
 import { GradientContainer } from '../components/GradientContainer';
 import { COLORS } from '../constants';
@@ -10,11 +10,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { audioService } from '../api/audioService';
 import { youtubeAudioService } from '../api/youtubeAudioService';
 import { AVPlaybackStatus } from 'expo-av';
+import { HiddenYouTubePlayer, YouTubePlayerRef } from '../components/HiddenYouTubePlayer';
 
 const { width, height } = Dimensions.get('window');
 
 export const VideoScreen = () => {
     const { user } = useAuth();
+    const youtubePlayerRef = useRef<YouTubePlayerRef>(null);
     const [savedSongs, setSavedSongs] = useState<any[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState<Song[]>([]);
@@ -28,31 +30,30 @@ export const VideoScreen = () => {
     const [activeTab, setActiveTab] = useState<'search' | 'trending' | 'recommended' | 'saved'>('trending');
     const [playerVisible, setPlayerVisible] = useState(false);
     const [backendAvailable, setBackendAvailable] = useState<boolean | null>(null);
+    const [youtubePlayerReady, setYoutubePlayerReady] = useState(false);
 
     const loadUserSettings = async () => {
-        // Check if backend is available first
-        const isBackendHealthy = await youtubeAudioService.checkBackendHealth();
-        setBackendAvailable(isBackendHealthy);
-        
-        if (isBackendHealthy) {
-            console.log('✅ Backend available - loading trending music via backend');
-            loadTrendingMusic(); // No API key needed for backend
-        } else if (user) {
-            console.log('🔄 Backend unavailable - checking for user API key');
+        // Initialize YouTube service with API key (client-side only)
+        if (user) {
+            console.log('🔑 Loading user YouTube API key...');
             const { data } = await getUserSettings(user.id);
             if (data?.youtube_api_key) {
+                youtubeAudioService.setApiKey(data.youtube_api_key);
                 setApiKey(data.youtube_api_key);
+                setBackendAvailable(true);
                 loadTrendingMusic(data.youtube_api_key);
             } else {
                 Alert.alert(
-                    "Music Features Limited",
-                    "Backend server not available and no YouTube API key configured. Please add your YouTube API key in the Profile section or check if the backend server is running.",
+                    "YouTube API Key Required",
+                    "Please add your YouTube API key in the Profile section to access music features.",
                     [{ text: "OK" }]
                 );
+                setBackendAvailable(false);
             }
         } else {
-            // Load trending music via backend even without user login
-            loadTrendingMusic();
+            // No user, cannot load music
+            console.log('⚠️ No user logged in');
+            setBackendAvailable(false);
         }
     };
 
@@ -66,30 +67,30 @@ export const VideoScreen = () => {
         try {
             setLoading(true);
             
-            // Try enhanced backend first
-            console.log('🔥 Loading trending music...');
-            const backendTrending = await youtubeAudioService.getTrendingMusic(20);
-            
-            if (backendTrending.length > 0) {
-                console.log('✅ Using backend trending music');
-                setTrendingMusic(backendTrending);
-                if (backendTrending.length > 0) {
-                    const recommended = await youtubeAudioService.searchYouTube(`${backendTrending[0].title} similar`, 10);
-                    setRecommendedMusic(recommended);
-                }
-                setBackendAvailable(true);
+            // Use provided key or the one from state
+            const apiKeyToUse = key || apiKey;
+            if (!apiKeyToUse) {
+                console.log('⚠️ No API key available for trending music');
                 return;
             }
+
+            console.log('🔥 Loading trending music...');
+            // Initialize service with key if not already set
+            if (!youtubeAudioService.isConfigured()) {
+                youtubeAudioService.setApiKey(apiKeyToUse);
+            }
+
+            const trending = await youtubeAudioService.getTrendingMusic(20);
             
-            // Fallback to original API if backend not available
-            if (key) {
-                console.log('🔄 Using fallback trending music API');
-                const trending = await getTrendingMusic(key, 20);
+            if (trending.length > 0) {
+                console.log('✅ Trending music loaded');
                 setTrendingMusic(trending);
-                if (trending.length > 0) {
-                    const recommended = await getMusicRecommendations(key, trending[0].title);
-                    setRecommendedMusic(recommended);
-                }
+                // Get recommendations based on first trending song
+                const recommended = await youtubeAudioService.getRecommendations(trending[0].title, 10);
+                setRecommendedMusic(recommended);
+                setBackendAvailable(true);
+            } else {
+                console.log('⚠️ No trending music found');
                 setBackendAvailable(false);
             }
         } catch (error) {
@@ -103,28 +104,23 @@ export const VideoScreen = () => {
     const handleSearch = async () => {
         if (!searchQuery.trim()) return;
 
+        if (!youtubeAudioService.isConfigured()) {
+            Alert.alert("Not Configured", "YouTube API key not configured. Please add it in your Profile.");
+            return;
+        }
+
         try {
             setLoading(true);
             console.log(`🔍 Searching for: ${searchQuery}`);
             
-            // Try enhanced backend search first
-            const backendResults = await youtubeAudioService.searchYouTube(searchQuery, 20);
+            const results = await youtubeAudioService.searchYouTube(searchQuery, 20);
             
-            if (backendResults.length > 0) {
-                console.log('✅ Using backend search results');
-                setSearchResults(backendResults);
-                setActiveTab('search');
-                return;
-            }
-            
-            // Fallback to original API if backend not available and API key exists
-            if (apiKey) {
-                console.log('🔄 Using fallback search API');
-                const results = await searchMusic(apiKey, searchQuery);
+            if (results.length > 0) {
+                console.log('✅ Search results found');
                 setSearchResults(results);
                 setActiveTab('search');
             } else {
-                Alert.alert("Search Unavailable", "Backend search not available and no API key configured.");
+                Alert.alert("No Results", "No music found for your search.");
             }
         } catch (error) {
             console.error("Search error:", error);
@@ -153,56 +149,31 @@ export const VideoScreen = () => {
         try {
             setCurrentSong(song);
             setPlayerLoading(true);
-            setPlaying(true);
             setPlayerVisible(true);
 
-            console.log('🎵 Playing song:', song.title, 'by', song.artist);
+            console.log('🎵 Playing song:', song.title, 'ID:', song.id);
 
-            // Show different alerts based on backend availability
-            if (!playing && !currentSong) {
-                if (backendAvailable) {
-                    Alert.alert(
-                        "🔥 Real YouTube Audio!",
-                        "Using direct YouTube audio extraction with enhanced quality and background support.",
-                        [{ text: "Awesome!" }]
-                    );
-                } else {
-                    Alert.alert(
-                        "🎵 Smart Audio",
-                        "Using intelligent audio matching with background support!",
-                        [{ text: "Got it!" }]
-                    );
-                }
+            // Wait a brief moment if player just became ready
+            if (!youtubePlayerReady) {
+                console.log('⏳ Waiting for YouTube player...');
+                await new Promise(resolve => setTimeout(resolve, 1000));
             }
 
-            // Try to get real YouTube audio URL or stream proxy
-            const audioChoice = await youtubeAudioService.getAudioUrlWithFallback(song);
-
-            if (audioChoice && (audioChoice.type === 'direct' || audioChoice.type === 'stream') && audioChoice.url) {
-                console.log(`✅ Playing ${audioChoice.type} audio:`, audioChoice.url.substring(0, 60));
-                await audioService.playFromUrl(
-                    audioChoice.url,
-                    { title: song.title, artist: song.artist },
-                    onPlaybackStatusUpdate
-                );
+            if (youtubePlayerRef.current) {
+                // Use real YouTube player
+                console.log('✅ Using YouTube player for:', song.id);
+                youtubePlayerRef.current.loadVideo(song.id);
+                youtubePlayerRef.current.play();
+                setPlaying(true);
             } else {
-                // Fallback to sample audio
-                console.log('🔄 Using fallback audio');
-                await audioService.loadAndPlayAudio(
-                    song.id,
-                    { title: song.title, artist: song.artist },
-                    onPlaybackStatusUpdate
-                );
+                console.log('⚠️ YouTube player ref not available');
             }
-            
+
             setPlayerLoading(false);
 
-            // Load recommendations
-            if (backendAvailable) {
-                const recommendations = await youtubeAudioService.searchYouTube(`${song.title} ${song.artist} similar`, 10);
-                setRecommendedMusic(recommendations);
-            } else if (apiKey) {
-                const recommendations = await getMusicRecommendations(apiKey, song.title);
+            // Load recommendations using YouTube API
+            if (youtubeAudioService.isConfigured()) {
+                const recommendations = await youtubeAudioService.getRecommendations(song.title, 10);
                 setRecommendedMusic(recommendations);
             }
         } catch (error) {
@@ -215,10 +186,15 @@ export const VideoScreen = () => {
 
     const togglePlayPause = async () => {
         try {
-            if (playerLoading) return;
-            
-            const isNowPlaying = await audioService.playPause();
-            setPlaying(isNowPlaying);
+            if (playerLoading || !youtubePlayerRef.current) return;
+
+            if (playing) {
+                youtubePlayerRef.current.pause();
+                setPlaying(false);
+            } else {
+                youtubePlayerRef.current.play();
+                setPlaying(true);
+            }
         } catch (error) {
             console.error('Error toggling playback:', error);
         }
@@ -228,7 +204,7 @@ export const VideoScreen = () => {
         if (status.isLoaded) {
             setPlaying(status.isPlaying);
             setPlayerLoading(false);
-            
+
             // Handle song end
             if (status.didJustFinish) {
                 handleSongEnd();
@@ -236,13 +212,57 @@ export const VideoScreen = () => {
         }
     };
 
+    const handleYouTubeReady = () => {
+        console.log('✅ YouTube player ready');
+        setYoutubePlayerReady(true);
+        setPlayerLoading(false);
+    };
+
+    // Auto-set player as ready after 3 seconds if callback doesn't fire
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            if (!youtubePlayerReady) {
+                console.log('⏰ Auto-enabling YouTube player after timeout');
+                setYoutubePlayerReady(true);
+            }
+        }, 3000);
+
+        return () => clearTimeout(timer);
+    }, [youtubePlayerReady]);
+
+    const handleYouTubeStateChange = (state: string) => {
+        console.log('🎵 YouTube state:', state);
+
+        if (state === 'playing') {
+            setPlaying(true);
+            setPlayerLoading(false);
+        } else if (state === 'paused') {
+            setPlaying(false);
+        } else if (state === 'ended') {
+            handleSongEnd();
+        } else if (state === 'buffering') {
+            setPlayerLoading(true);
+        }
+    };
+
+    const handleYouTubeError = (error: string) => {
+        console.error('❌ YouTube player error:', error);
+        Alert.alert('Playback Error', 'Unable to play this video. It may be restricted or unavailable.');
+        setPlayerLoading(false);
+        setPlaying(false);
+    };
+
 
 
     const handleSongEnd = () => {
+        console.log('🎵 Song ended, playing next...');
         setPlaying(false);
         if (recommendedMusic.length > 0) {
             const nextSong = recommendedMusic[Math.floor(Math.random() * recommendedMusic.length)];
+            console.log('▶️ Auto-playing:', nextSong.title);
             playSong(nextSong);
+        } else {
+            console.log('ℹ️ No recommendations available for auto-play');
         }
     };
 
@@ -255,7 +275,9 @@ export const VideoScreen = () => {
         if (recommendedMusic.length > 0) {
             const currentIndex = recommendedMusic.findIndex(song => song.id === currentSong?.id);
             const nextIndex = (currentIndex + 1) % recommendedMusic.length;
-            playSong(recommendedMusic[nextIndex]);
+            const nextSong = recommendedMusic[nextIndex];
+            console.log('⏭️ Skipping to next:', nextSong.title);
+            playSong(nextSong);
         }
     };
 
@@ -263,7 +285,9 @@ export const VideoScreen = () => {
         if (recommendedMusic.length > 0) {
             const currentIndex = recommendedMusic.findIndex(song => song.id === currentSong?.id);
             const prevIndex = currentIndex > 0 ? currentIndex - 1 : recommendedMusic.length - 1;
-            playSong(recommendedMusic[prevIndex]);
+            const prevSong = recommendedMusic[prevIndex];
+            console.log('⏮️ Skipping to previous:', prevSong.title);
+            playSong(prevSong);
         }
     };
 
@@ -287,15 +311,18 @@ export const VideoScreen = () => {
         checkBackendStatus();
     }, [user]);
 
-    // Check backend server availability
+    // Check YouTube service configuration
     const checkBackendStatus = async () => {
-        const available = await youtubeAudioService.isBackendAvailable();
-        setBackendAvailable(available);
+        const configured = youtubeAudioService.isConfigured();
+        setBackendAvailable(configured);
     };
 
     // Cleanup audio on unmount
     useEffect(() => {
         return () => {
+            if (youtubePlayerRef.current) {
+                youtubePlayerRef.current.stop();
+            }
             audioService.unload();
         };
     }, []);
@@ -358,24 +385,24 @@ export const VideoScreen = () => {
     return (
         <GradientContainer>
             <View style={styles.container}>
-                {/* Header with Backend Status */}
+                {/* Header with Status */}
                 <View style={styles.header}>
                     <Text style={styles.headerTitle}>Music</Text>
                     <View style={styles.statusContainer}>
                         {backendAvailable === null ? (
                             <View style={styles.statusItem}>
                                 <ActivityIndicator size={12} color="orange" />
-                                <Text style={styles.statusText}>Checking...</Text>
+                                <Text style={styles.statusText}>Loading...</Text>
                             </View>
                         ) : backendAvailable ? (
                             <TouchableOpacity style={styles.statusItem} onPress={checkBackendStatus}>
                                 <Ionicons name="checkmark-circle" size={16} color="#10B981" />
-                                <Text style={[styles.statusText, { color: '#10B981' }]}>Real YouTube</Text>
+                                <Text style={[styles.statusText, { color: '#10B981' }]}>Client-Side Ready</Text>
                             </TouchableOpacity>
                         ) : (
                             <TouchableOpacity style={styles.statusItem} onPress={checkBackendStatus}>
-                                <Ionicons name="warning" size={16} color="orange" />
-                                <Text style={[styles.statusText, { color: 'orange' }]}>Fallback Audio</Text>
+                                <Ionicons name="alert-circle" size={16} color="orange" />
+                                <Text style={[styles.statusText, { color: 'orange' }]}>Configure API Key</Text>
                             </TouchableOpacity>
                         )}
                     </View>
@@ -410,7 +437,7 @@ export const VideoScreen = () => {
 
                 {/* Tabs */}
                 <View style={styles.tabContainer}>
-                    {['trending', 'recommended', 'saved'].map((tab) => (
+                    {['search', 'trending', 'recommended', 'saved'].map((tab) => (
                         <TouchableOpacity
                             key={tab}
                             style={[styles.tab, activeTab === tab && styles.activeTab]}
@@ -539,6 +566,14 @@ export const VideoScreen = () => {
                         </TouchableOpacity>
                     </TouchableOpacity>
                 )}
+
+                {/* Hidden YouTube Player */}
+                <HiddenYouTubePlayer
+                    ref={youtubePlayerRef}
+                    onReady={handleYouTubeReady}
+                    onStateChange={handleYouTubeStateChange}
+                    onError={handleYouTubeError}
+                />
             </View>
         </GradientContainer>
     );

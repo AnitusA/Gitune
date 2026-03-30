@@ -1,10 +1,5 @@
-// Enhanced YouTube Service with Real Audio Extraction
-import { Song } from './youtube';
-
-// Backend URL — update this after deploying to Render
-// For local dev: 'http://192.168.100.46:3001'
-// For production: 'https://your-app-name.onrender.com'
-const BACKEND_SERVER_URL = 'https://gitune.onrender.com';
+// Client-Side YouTube Service (No Backend Required)
+import { Song, searchMusic, getTrendingMusic, getMusicRecommendations } from './youtube';
 
 export interface YouTubeAudioInfo {
   success: boolean;
@@ -19,258 +14,50 @@ export interface YouTubeAudioInfo {
   extractedAt: string;
 }
 
-export interface VideoSearchResponse {
-  success: boolean;
-  videos: Array<{
-    id: string;
-    title: string;
-    artist: string;
-    thumbnail: string;
-    publishedAt: string;
-    description?: string;
-  }>;
-  query?: string;
-  totalResults: number;
-}
-
-export interface TrendingResponse {
-  success: boolean;
-  videos: Array<{
-    id: string;
-    title: string;
-    artist: string;
-    thumbnail: string;
-    publishedAt: string;
-    viewCount?: string;
-    likeCount?: string;
-    duration?: string;
-  }>;
-  regionCode: string;
-  totalResults: number;
-}
-
 export interface HealthStatus {
-  status: string;
-  timestamp: string;
   youtubeApiConfigured: boolean;
-  apiKey: string;
-  services: {
-    ytDlp: string;
-    youtubeDataApi: string;
-  };
+  services: string[];
 }
 
 export class YouTubeAudioService {
-  private backendHealthy: boolean = false;
-  private lastHealthCheck: number = 0;
-  private healthCheckInterval: number = 60000; // 1 minute
-  
+  private apiKey: string = '';
   /**
-   * Check backend health and YouTube API status
+   * Initialize service with API key
+   */
+  setApiKey(apiKey: string) {
+    this.apiKey = apiKey;
+    console.log('✅ API key configured for YouTube service');
+  }
+
+  /**
+   * Check if API key is configured
+   */
+  isConfigured(): boolean {
+    return !!this.apiKey;
+  }
+
+  /**
+   * Health check - just verify API key is set
    */
   async checkBackendHealth(): Promise<boolean> {
-    const now = Date.now();
-    
-    // Don't check too frequently
-    if (this.backendHealthy && (now - this.lastHealthCheck) < this.healthCheckInterval) {
-      return this.backendHealthy;
-    }
-
-    try {
-      console.log('🏥 Checking YouTube backend health...');
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
-      
-      const response = await fetch(`${BACKEND_SERVER_URL}/api/health`, {
-        method: 'GET',
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeoutId);
-      
-      if (response.ok) {
-        const health: HealthStatus = await response.json();
-        this.backendHealthy = true;
-        this.lastHealthCheck = now;
-        
-        console.log('✅ Backend healthy:', {
-          youtubeApiConfigured: health.youtubeApiConfigured,
-          services: health.services
-        });
-        
-        return true;
-      } else {
-        throw new Error(`Health check failed with status: ${response.status}`);
-      }
-    } catch (error) {
-      console.log('❌ Backend not available:', (error as any)?.message);
-      this.backendHealthy = false;
-      this.lastHealthCheck = now;
-      return false;
-    }
+    const isReady = this.isConfigured();
+    console.log(isReady ? '✅ YouTube API ready' : '⚠️ YouTube API key not configured');
+    return isReady;
   }
-  
   /**
-   * Get real YouTube audio stream URL with enhanced error handling
-   */
-  async getAudioUrl(videoId: string, quality: string = 'highestaudio'): Promise<YouTubeAudioInfo | null> {
-    if (!await this.checkBackendHealth()) {
-      console.log('🔄 Backend unavailable, skipping real audio extraction');
-      return null;
-    }
-
-    try {
-      console.log(`🎵 Extracting audio for video: ${videoId}`);
-      
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
-      
-      const response = await fetch(
-        `${BACKEND_SERVER_URL}/api/audio/${videoId}?quality=${quality}`, {
-          method: 'GET',
-          signal: controller.signal,
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-      
-      clearTimeout(timeoutId);
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
-      }
-      
-      const audioInfo: YouTubeAudioInfo = await response.json();
-      
-      if (audioInfo.success && audioInfo.audioUrl) {
-        console.log('✅ Real YouTube audio extracted successfully:');
-        console.log(`   Title: ${audioInfo.title}`);
-        console.log(`   Quality: ${audioInfo.quality}`);
-        console.log(`   Duration: ${audioInfo.duration}s`);
-        return audioInfo;
-      } else {
-        throw new Error('No audio URL in response');
-      }
-      
-    } catch (error) {
-      console.error('❌ Failed to get YouTube audio URL:', (error as any)?.message);
-      return null;
-    }
-  }
-
-  /**
-   * Stream YouTube audio directly
-   */
-  getDirectStreamUrl(videoId: string): string {
-    return `${BACKEND_SERVER_URL}/api/stream/${videoId}`;
-  }
-
-  /**
-   * Get video metadata from YouTube API
-   */
-  async getVideoDetails(videoId: string): Promise<Song | null> {
-    if (!await this.checkBackendHealth()) {
-      console.log('🔄 Backend unavailable, video details not available');
-      return null;
-    }
-
-    try {
-      console.log(`📋 Getting video details for: ${videoId}`);
-      
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
-      
-      const response = await fetch(`${BACKEND_SERVER_URL}/api/video/${videoId}/details`, {
-        method: 'GET',
-        signal: controller.signal,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      clearTimeout(timeoutId);
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
-      }
-      
-      const data = await response.json();
-      
-      if (data.success && data.video) {
-        const video = data.video;
-        console.log(`✅ Video details retrieved: ${video.title}`);
-        
-        return {
-          id: video.id,
-          title: video.title,
-          artist: video.artist,
-          duration: this.formatDuration(video.duration),
-          thumbnail: video.thumbnail,
-          channelTitle: video.artist,
-          viewCount: this.formatViewCount(video.viewCount)
-        };
-      } else {
-        throw new Error('No video details available');
-      }
-      
-    } catch (error) {
-      console.error('❌ Failed to get video metadata:', (error as any)?.message);
-      return null;
-    }
-  }
-
-  /**
-   * Search YouTube with enhanced backend
+   * Search YouTube directly using API
    */
   async searchYouTube(query: string, maxResults = 20): Promise<Song[]> {
-    if (!await this.checkBackendHealth()) {
-      console.log('🔄 Backend unavailable, search not available');
+    if (!this.isConfigured()) {
+      console.log('❌ API key not configured for search');
       return [];
     }
 
     try {
       console.log(`🔍 Searching YouTube for: ${query}`);
-      
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-      
-      const response = await fetch(
-        `${BACKEND_SERVER_URL}/api/search?q=${encodeURIComponent(query)}&maxResults=${maxResults}`, {
-          method: 'GET',
-          signal: controller.signal,
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-      
-      clearTimeout(timeoutId);
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `Search failed: ${response.status}`);
-      }
-      
-      const data: VideoSearchResponse = await response.json();
-      
-      if (data.success && data.videos) {
-        console.log(`✅ Found ${data.videos.length} videos for: ${query}`);
-        return data.videos.map((video: any) => ({
-          id: video.id,
-          title: video.title,
-          artist: video.artist,
-          duration: 'Unknown', // Will be fetched when playing
-          thumbnail: video.thumbnail,
-          channelTitle: video.artist
-        }));
-      } else {
-        console.log(`🔍 No videos found for: ${query}`);
-        return [];
-      }
-      
+      const results = await searchMusic(this.apiKey, query, maxResults);
+      console.log(`✅ Found ${results.length} videos for: ${query}`);
+      return results;
     } catch (error) {
       console.error('❌ YouTube search failed:', (error as any)?.message);
       return [];
@@ -278,54 +65,19 @@ export class YouTubeAudioService {
   }
 
   /**
-   * Get trending music from YouTube
+   * Get trending music directly from YouTube API
    */
   async getTrendingMusic(maxResults = 20, regionCode = 'US'): Promise<Song[]> {
-    if (!await this.checkBackendHealth()) {
-      console.log('🔄 Backend unavailable, trending not available');
+    if (!this.isConfigured()) {
+      console.log('❌ API key not configured for trending');
       return [];
     }
 
     try {
-      console.log(`🔥 Getting trending music videos for region: ${regionCode}`);
-      
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
-      
-      const response = await fetch(
-        `${BACKEND_SERVER_URL}/api/trending?maxResults=${maxResults}&regionCode=${regionCode}`, {
-          method: 'GET',
-          signal: controller.signal,
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-      
-      clearTimeout(timeoutId);
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `Trending fetch failed: ${response.status}`);
-      }
-      
-      const data: TrendingResponse = await response.json();
-      
-      if (data.success && data.videos) {
-        console.log(`✅ Found ${data.videos.length} trending videos`);
-        return data.videos.map((video: any) => ({
-          id: video.id,
-          title: video.title,
-          artist: video.artist,
-          duration: this.formatDuration(video.duration),
-          thumbnail: video.thumbnail,
-          channelTitle: video.artist,
-          viewCount: this.formatViewCount(video.viewCount)
-        }));
-      } else {
-        throw new Error('No trending videos available');
-      }
-      
+      console.log(`🔥 Getting trending music videos`);
+      const results = await getTrendingMusic(this.apiKey, maxResults);
+      console.log(`✅ Found ${results.length} trending videos`);
+      return results;
     } catch (error) {
       console.error('❌ Failed to get trending music:', (error as any)?.message);
       return [];
@@ -333,35 +85,87 @@ export class YouTubeAudioService {
   }
 
   /**
-   * Check if backend server is available
+   * Get recommendations for a song
    */
-  async isBackendAvailable(): Promise<boolean> {
-    return await this.checkBackendHealth();
+  async getRecommendations(songTitle: string, maxResults = 10): Promise<Song[]> {
+    if (!this.isConfigured()) {
+      console.log('❌ API key not configured for recommendations');
+      return [];
+    }
+
+    try {
+      console.log(`📚 Getting recommendations based on: ${songTitle}`);
+      const results = await getMusicRecommendations(this.apiKey, songTitle, maxResults);
+      console.log(`✅ Found ${results.length} recommendations`);
+      return results;
+    } catch (error) {
+      console.error('❌ Failed to get recommendations:', (error as any)?.message);
+      return [];
+    }
   }
 
   /**
-   * Get audio URL with enhanced fallback handling
+   * Get audio URL with fallback
+   * Note: Direct YouTube audio extraction is not possible client-side due to CORS restrictions.
+   * Using fallback audio URLs for playback.
    */
-  // Return detailed choice for playback: direct audio URL, proxied stream, or fallback
   async getAudioUrlWithFallback(song: Song): Promise<{
-    type: 'direct' | 'stream' | 'fallback',
+    type: 'fallback' | 'youtube',
     url: string,
     info?: YouTubeAudioInfo
   }> {
-    console.log(`🎯 Getting audio for: ${song.title} (${song.id})`);
+    console.log(`🎵 Getting audio for: ${song.title} (${song.id})`);
+    
+    // Return fallback audio
+    // Note: For real YouTube audio extraction, you would need a backend server with yt-dlp
+    // Alternatives: YouTube Premium Music API, or embed YouTube player
+    return { 
+      type: 'fallback', 
+      url: this.getFallbackAudio(song),
+      info: {
+        success: true,
+        audioUrl: this.getFallbackAudio(song),
+        quality: 'fallback',
+        container: 'mp3',
+        codecs: 'mp3',
+        duration: this.parseDuration(song.duration),
+        title: song.title,
+        author: song.artist,
+        videoId: song.id,
+        extractedAt: new Date().toISOString()
+      }
+    };
+  }
 
-    // Prefer the backend stream proxy — it's the most reliable for mobile playback.
-    // Avoid calling /api/audio for direct URLs which can fail for some videos;
-    // instead use the proxied stream that the server will fetch and serve in a
-    // mobile-friendly container (m4a/mp4) that `expo-av` supports.
-    if (await this.checkBackendHealth()) {
-      console.log('🔄 Using backend proxied stream for reliable playback');
-      return { type: 'stream', url: this.getDirectStreamUrl(song.id) };
-    }
+  /**
+   * Get YouTube video URL for embedded player
+   */
+  getYouTubeVideoUrl(videoId: string): string {
+    return `https://www.youtube.com/watch?v=${videoId}`;
+  }
 
-    // Fallback to alternative hosted audio
-    console.log('🎵 Using fallback audio for:', song.title);
-    return { type: 'fallback', url: this.getFallbackAudio(song) };
+  /**
+   * Get YouTube embed URL
+   */
+  getEmbedUrl(videoId: string): string {
+    return `https://www.youtube.com/embed/${videoId}`;
+  }
+
+  /**
+   * Get video details (using search)
+   */
+  async getVideoDetails(videoId: string): Promise<Song | null> {
+    // Video details would come from search results
+    // This is a placeholder since we get this from search results
+    console.log(`📋 Getting video details for: ${videoId}`);
+    return null;
+  }
+
+  /**
+   * Check if backend is available (always false for client-side)
+   */
+  async isBackendAvailable(): Promise<boolean> {
+    return false; // No backend needed for client-side-only mode
   }
 
   /**
@@ -384,16 +188,39 @@ export class YouTubeAudioService {
   }
 
   /**
-   * Utility methods
+   * Get backend status
    */
   getBackendStatus(): { healthy: boolean; lastCheck: Date } {
     return {
-      healthy: this.backendHealthy,
-      lastCheck: new Date(this.lastHealthCheck)
+      healthy: false,
+      lastCheck: new Date()
     };
   }
 
-  private formatDuration(duration: string | number): string {
+  /**
+   * Parse duration from string format (e.g., "4:13")
+   */
+  private parseDuration(duration: string): number {
+    if (!duration) return 0;
+    
+    const parts = duration.split(':').map(Number);
+    let seconds = 0;
+    
+    if (parts.length === 3) {
+      seconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
+    } else if (parts.length === 2) {
+      seconds = parts[0] * 60 + parts[1];
+    } else {
+      seconds = parts[0];
+    }
+    
+    return seconds;
+  }
+
+  /**
+   * Utility: Format duration for display
+   */
+  formatDuration(duration: string | number): string {
     if (typeof duration === 'number') {
       // Duration in seconds
       const hours = Math.floor(duration / 3600);
@@ -426,7 +253,10 @@ export class YouTubeAudioService {
     return `${minutes || '0'}:${seconds.padStart(2, '0')}`;
   }
 
-  private formatViewCount(count: string | number): string {
+  /**
+   * Utility: Format view count
+   */
+  formatViewCount(count: string | number): string {
     if (!count) return '0';
     
     const num = typeof count === 'string' ? parseInt(count) : count;

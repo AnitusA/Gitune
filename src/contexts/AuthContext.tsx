@@ -43,10 +43,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
             const storedUser = await AsyncStorage.getItem(USER_STORAGE_KEY);
             if (storedUser) {
+                console.log('📦 Loaded stored user from AsyncStorage');
                 setUser(JSON.parse(storedUser));
+            } else {
+                console.log('📦 No stored user found');
             }
         } catch (error) {
             console.error('Error loading stored user:', error);
+            // Clear corrupted data
+            await AsyncStorage.removeItem(USER_STORAGE_KEY);
         } finally {
             setLoading(false);
         }

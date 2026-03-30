@@ -23,6 +23,24 @@ import { hashPassword, verifyPassword } from '../utils/passwordHash';
  */
 export const customSignUp = async (email: string, password: string) => {
     try {
+        // Debug logging
+        console.log('🔍 customSignUp called with:', {
+            email: email,
+            emailType: typeof email,
+            password: password ? '***' : password,
+            passwordType: typeof password,
+            emailLength: email?.length,
+            passwordLength: password?.length
+        });
+
+        // Validate inputs
+        if (!email || typeof email !== 'string') {
+            throw new Error('Email must be a valid string');
+        }
+        if (!password || typeof password !== 'string') {
+            throw new Error('Password must be a valid string');
+        }
+
         // 1. Hash the password
         const hashedPassword = await hashPassword(password);
 
@@ -52,6 +70,14 @@ export const customSignUp = async (email: string, password: string) => {
  */
 export const customSignIn = async (email: string, password: string) => {
     try {
+        // Validate inputs
+        if (!email || typeof email !== 'string') {
+            return { data: null, error: new Error('Email must be a valid string') };
+        }
+        if (!password || typeof password !== 'string') {
+            return { data: null, error: new Error('Password must be a valid string') };
+        }
+
         // 1. Get user from database
         const { data: user, error } = await supabase
             .from('custom_auth_users')

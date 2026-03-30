@@ -22,23 +22,48 @@ export interface Playlist {
 export const searchMusic = async (apiKey: string, query: string, maxResults = 20): Promise<Song[]> => {
   try {
     const searchUrl = `${YOUTUBE_API_BASE}/search?part=snippet&type=video&videoCategoryId=10&q=${encodeURIComponent(query + ' music')}&maxResults=${maxResults}&key=${apiKey}`;
-    
+
     const response = await fetch(searchUrl);
     const data = await response.json();
-    
+
     if (!response.ok) {
+      console.error('YouTube search API error:', data.error);
       throw new Error(data.error?.message || 'Search failed');
+    }
+
+    if (!data.items || data.items.length === 0) {
+      console.log('No search results found for:', query);
+      return [];
     }
 
     // Get video details for duration and view count
     const videoIds = data.items.map((item: any) => item.id.videoId).join(',');
     const detailsUrl = `${YOUTUBE_API_BASE}/videos?part=contentDetails,statistics&id=${videoIds}&key=${apiKey}`;
-    
+
     const detailsResponse = await fetch(detailsUrl);
     const detailsData = await detailsResponse.json();
-    
+
+    if (!detailsResponse.ok) {
+      console.error('YouTube video details error:', detailsData.error);
+      // Return basic results without details
+      return data.items.map((item: any) => ({
+        id: item.id.videoId,
+        title: item.snippet.title,
+        artist: item.snippet.channelTitle,
+        duration: '0:00',
+        thumbnail: item.snippet.thumbnails.medium.url,
+        channelTitle: item.snippet.channelTitle,
+        viewCount: '0'
+      }));
+    }
+
+    if (!detailsData.items || detailsData.items.length === 0) {
+      console.log('No video details found');
+      return [];
+    }
+
     return data.items.map((item: any, index: number) => {
-      const details = detailsData.items[index];
+      const details = detailsData.items[index] || {};
       return {
         id: item.id.videoId,
         title: item.snippet.title,
@@ -61,24 +86,49 @@ export const getMusicRecommendations = async (apiKey: string, basedOnSong: strin
     // Search for similar music using related keywords
     const genres = ['pop music', 'rock music', 'hip hop music', 'electronic music', 'indie music'];
     const randomGenre = genres[Math.floor(Math.random() * genres.length)];
-    
+
     const searchUrl = `${YOUTUBE_API_BASE}/search?part=snippet&type=video&videoCategoryId=10&q=${encodeURIComponent(basedOnSong + ' ' + randomGenre)}&maxResults=${maxResults}&key=${apiKey}`;
-    
+
     const response = await fetch(searchUrl);
     const data = await response.json();
-    
+
     if (!response.ok) {
+      console.error('YouTube API error:', data.error);
       throw new Error(data.error?.message || 'Recommendations failed');
+    }
+
+    if (!data.items || data.items.length === 0) {
+      console.log('No search results found');
+      return [];
     }
 
     const videoIds = data.items.map((item: any) => item.id.videoId).join(',');
     const detailsUrl = `${YOUTUBE_API_BASE}/videos?part=contentDetails,statistics&id=${videoIds}&key=${apiKey}`;
-    
+
     const detailsResponse = await fetch(detailsUrl);
     const detailsData = await detailsResponse.json();
-    
+
+    if (!detailsResponse.ok) {
+      console.error('YouTube video details error:', detailsData.error);
+      // Return basic results without details
+      return data.items.map((item: any) => ({
+        id: item.id.videoId,
+        title: item.snippet.title,
+        artist: item.snippet.channelTitle,
+        duration: '0:00',
+        thumbnail: item.snippet.thumbnails.medium.url,
+        channelTitle: item.snippet.channelTitle,
+        viewCount: '0'
+      }));
+    }
+
+    if (!detailsData.items || detailsData.items.length === 0) {
+      console.log('No video details found');
+      return [];
+    }
+
     return data.items.map((item: any, index: number) => {
-      const details = detailsData.items[index];
+      const details = detailsData.items[index] || {};
       return {
         id: item.id.videoId,
         title: item.snippet.title,
@@ -138,25 +188,50 @@ export const getMusicByGenre = async (apiKey: string, genre: string, maxResults 
   };
 
   const query = genreQueries[genre.toLowerCase()] || `${genre} music`;
-  
+
   try {
     const searchUrl = `${YOUTUBE_API_BASE}/search?part=snippet&type=video&videoCategoryId=10&q=${encodeURIComponent(query)}&maxResults=${maxResults}&key=${apiKey}`;
-    
+
     const response = await fetch(searchUrl);
     const data = await response.json();
-    
+
     if (!response.ok) {
+      console.error('YouTube genre search error:', data.error);
       throw new Error(data.error?.message || 'Genre search failed');
+    }
+
+    if (!data.items || data.items.length === 0) {
+      console.log('No genre results found for:', genre);
+      return [];
     }
 
     const videoIds = data.items.map((item: any) => item.id.videoId).join(',');
     const detailsUrl = `${YOUTUBE_API_BASE}/videos?part=contentDetails,statistics&id=${videoIds}&key=${apiKey}`;
-    
+
     const detailsResponse = await fetch(detailsUrl);
     const detailsData = await detailsResponse.json();
-    
+
+    if (!detailsResponse.ok) {
+      console.error('YouTube video details error:', detailsData.error);
+      // Return basic results without details
+      return data.items.map((item: any) => ({
+        id: item.id.videoId,
+        title: item.snippet.title,
+        artist: item.snippet.channelTitle,
+        duration: '0:00',
+        thumbnail: item.snippet.thumbnails.medium.url,
+        channelTitle: item.snippet.channelTitle,
+        viewCount: '0'
+      }));
+    }
+
+    if (!detailsData.items || detailsData.items.length === 0) {
+      console.log('No video details found');
+      return [];
+    }
+
     return data.items.map((item: any, index: number) => {
-      const details = detailsData.items[index];
+      const details = detailsData.items[index] || {};
       return {
         id: item.id.videoId,
         title: item.snippet.title,
